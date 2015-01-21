@@ -1,3 +1,5 @@
+import requests_mock
+
 from django import forms
 from django.conf import settings
 from django.core.urlresolvers import reverse
@@ -7,6 +9,16 @@ from .models import DjangoHero
 
 
 class TestIndex(TestCase):
+
+    @classmethod
+    @requests_mock.mock()
+    def setUpClass(cls, mocker):
+        mocker.register_uri(
+            'GET',
+            'https://api.stripe.com/v1/customers',
+            status_code=200
+        )
+
     def test_donors_count(self):
         DjangoHero.objects.create()
         response = self.client.get('/fundraising/')
@@ -45,3 +57,17 @@ class TestIndex(TestCase):
         self.assertEqual(response.context['form'].fields['amount'].widget.__class__, forms.HiddenInput)
         # Checking if campaign field is same as campaign
         self.assertEqual(response.context['form'].initial['campaign'], campaign)
+
+    def test_submitting_donation_form(self):
+        response = self.client.post(reverse('fundraising:donate'), {'amount': 100})
+        self.assertFalse(response.context['form'].is_valid())
+
+        response = self.client.post(reverse('fundraising:donate'), {
+            'amount': 100,
+            'number': '4242424242424242',
+            'cvc': '111',
+            'expires': '11/18',
+            'campaign': None,
+            'stripe_token': 'test',
+        })
+        self.assertTrue(response.context['form'].is_valid())
